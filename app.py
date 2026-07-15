@@ -33,14 +33,18 @@ if uploaded_file is not None:
 
     with st.spinner("AI is thinking..."):
         try:
-            # We target the fast and free Groq endpoint
+            # Point to Groq's free API endpoint
             url = "https://api.groq.com/openai/v1/chat/completions"
+            
+            # Added "User-Agent" to trick Cloudflare so we don't get blocked with a 403!
             headers = {
                 "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             }
+            
             data = {
-                "model": "openai/gpt-oss-120b", # A powerful free-tier model on Groq
+                "model": "llama-3.1-8b-instant", # Highly stable free model on Groq
                 "messages": [
                     {"role": "system", "content": "You are an expert summarizer. Summarize this text into clear, structured bullet points with bold key headings."},
                     {"role": "user", "content": extracted_text[:40000]}

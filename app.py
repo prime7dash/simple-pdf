@@ -1,13 +1,22 @@
+import subprocess
+import sys
+
+# Force install pypdf if Streamlit misses it
+try:
+    import pypdf
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "pypdf"])
+    import pypdf
+
 import streamlit as st
-import pypdf
 from openai import OpenAI
 
-# 1. Setup the website look
+# Setup the website look
 st.set_page_config(page_title="PDF Summarizer", page_icon="📄", layout="centered")
 st.title("📄 Simple PDF Summarizer")
 st.write("Upload a PDF to get an AI summary instantly.")
 
-# 2. Ask for the OpenAI password key on the screen
+# Ask for the OpenAI password key on the screen
 api_key = st.sidebar.text_input("Enter OpenAI Key", type="password")
 
 if not api_key:
@@ -17,7 +26,7 @@ if not api_key:
 # Connect to OpenAI
 client = OpenAI(api_key=api_key)
 
-# 3. Create the upload button
+# Create the upload button
 uploaded_file = st.file_uploader("Upload your PDF file", type="pdf")
 
 if uploaded_file is not None:
@@ -37,7 +46,7 @@ if uploaded_file is not None:
 
     with st.spinner("AI is thinking..."):
         try:
-            # 4. Send text to ChatGPT's brain (Removed the 10,000 character limit)
+            # Send text to ChatGPT
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -46,14 +55,14 @@ if uploaded_file is not None:
                 ]
             )
             
-            summary = response.choices[0].message.content
+            summary = response.choices.message.content
 
-            # 5. Print the summary on screen
+            # Print the summary on screen
             st.success("Done!")
             st.write("### Summary:")
             st.markdown(summary)
 
-            # 6. Bonus: Let the user download the text summary
+            # Let the user download the text summary
             st.download_button(
                 label="Download Summary as Text File",
                 data=summary,

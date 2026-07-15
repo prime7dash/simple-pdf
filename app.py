@@ -29,4 +29,25 @@ for msg in st.session_state.messages:
 prompt = st.chat_input("Ask me anything...")
 
 if prompt:
-    st
+    st.session_state.messages.append({"role": "user", "content": prompt})
+
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=st.session_state.messages,
+        )
+
+        reply = response.choices[0].message.content
+
+    except Exception as e:
+        reply = f"❌ API Error:\n\n{str(e)}"
+
+    with st.chat_message("assistant"):
+        st.markdown(reply)
+
+    st.session_state.messages.append(
+        {"role": "assistant", "content": reply}
+    )

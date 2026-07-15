@@ -1,128 +1,93 @@
+import time
+import tempfile
+import os
+
 import streamlit as st
-import urllib.request
-import json
-import base64
+from google import genai
 
-st.set_page_config(page_title="Anshuman's Gemini PDF AI", page_icon="💬", layout="centered")
-st.title("💬 Anshuman's PDF Chat & Summary AI")
-st.caption("Created by Anshuman Dash")
-st.write("Upload a PDF to get an instant summary and start chatting. **No installation required!**")
+st.set_page_config(page_title="PDF Summarizer", page_icon="📄", layout="centered")
+st.title("📄 PDF Summarizer")
+st.caption("Upload a PDF and get an AI-generated summary powered by Gemini.")
 
-# Fetching the Gemini Key from Streamlit Secrets
-if "GEMINI_API_KEY" in st.secrets:
-    api_key = st.secrets["GEMINI_API_KEY"]
-else:
-    st.error("🔑 Gemini API Key missing! Please configure 'GEMINI_API_KEY' in your Streamlit Cloud Secrets dashboard.")
+# ---- API key setup ----
+# On Streamlit Cloud: add GEMINI_API_KEY in Settings > Secrets
+# Locally: create .streamlit/secrets.toml with GEMINI_API_KEY = "your-key"
+api_key = st.secrets.get("GEMINI_API_KEY")
+
+if not api_key:
+    st.error("No Gemini API key found. Add GEMINI_API_KEY in Streamlit secrets.")
     st.stop()
 
-# Initialize session states to remember summary and chat history
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-if "summary" not in st.session_state:
-    st.session_state.summary = ""
-if "current_file" not in st.session_state:
-    st.session_state.current_file = None
+client = genai.Client(api_key=api_key)
+MODEL = "gemini-2.5-flash"
 
-uploaded_file = st.file_uploader("Upload your PDF file", type="pdf")
+# ---- Sidebar options ----
+st.sidebar.header("Options")
+summary_style = st.sidebar.selectbox(
+    "Summary style",
+    ["Concise (bullet points)", "Detailed (paragraphs)", "Executive summary"],
+)
+custom_instructions = st.sidebar.text_area(
+    "Extra instructions (optional)",
+    placeholder="e.g. Focus on financial figures, ignore appendix...",
+)
 
-# If a different PDF is uploaded, reset the state
+style_prompts = {
+    "Concise (bullet points)": "Summarize the document as clear, concise bullet points covering the key ideas.",
+    "Detailed (paragraphs)": "Write a detailed summary in well-organized paragraphs covering the main sections.",
+    "Executive summary": "Write a short executive summary (under 200 words) highlighting only the most important takeaways.",
+}
+
+# ---- File upload ----
+uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
+
 if uploaded_file is not None:
-    if st.session_state.current_file != uploaded_file.name:
-        st.session_state.current_file = uploaded_file.name
-        st.session_state.summary = ""
-        st.session_state.chat_history = []
+    st.info(f"**{uploaded_file.name}** ready ({uploaded_file.size / 1024:.1f} KB)")
 
-    # Read PDF bytes and convert to base64 encoding natively
-    file_bytes = uploaded_file.read()
-    base64_pdf = base64.b64encode(file_bytes).decode("utf-8")
-    
-    # Step 1: Generate Summary automatically if it doesn't exist
-    if not st.session_state.summary:
-        with st.spinner("Gemini is reading your PDF and writing a summary..."):
+    if st.button("Summarize", type="primary"):
+        with st.spinner("Uploading PDF and generating summary..."):
+            tmp_path = None
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-                headers = {"Content-Type": "application/json"}
-                
-                data = {
-                    "contents": [{
-                        "parts": [
-                            {"text": "Analyze this entire PDF document and generate a highly accurate, beautiful, and structured summary. Use bold headings and clean bullet points to organize the key takeaways."},
-                            {
-                                "inlineData": {
-                                    "mimeType": "application/pdf",
-                                    "data": base64_pdf
-                                }
-                            }
-                        ]
-                    }]
-                }
-                
-                req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers=headers)
-                with urllib.request.urlopen(req) as response:
-                    res_data = json.loads(response.read().decode('utf-8'))
-                    st.session_state.summary = res_data['candidates'][0]['content']['parts'][0]['text']
-            except Exception as e:
-                st.error(f"Error generating summary: {e}")
-                st.stop()
+                # Save to a temp file since the Gemini SDK uploads by file path
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                    tmp.write(uploaded_file.getvalue())
+                    tmp_path = tmp.name
 
-    # Step 2: Render Summary and Chat Window
-    if st.session_state.summary:
-        st.success("PDF analyzed successfully!")
-        with st.expander("📄 View PDF Summary", expanded=True):
-            st.markdown(st.session_state.summary)
-            
-        st.write("---")
-        st.write("### 💬 Ask Questions About the PDF")
-        
-        # Display chat history on screen
-        for message in st.session_state.chat_history:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-                
-        # Accept user question input
-        if user_query := st.chat_input("Ask something about the PDF..."):
-            with st.chat_message("user"):
-                st.markdown(user_query)
-            st.session_state.chat_history.append({"role": "user", "content": user_query})
-            
-            with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                with st.spinner("Thinking..."):
-                    try:
-                        # Build context including past conversation history
-                        history_context = ""
-                        for chat in st.session_state.chat_history[:-1]:
-                            history_context += f"{chat['role'].capitalize()}: {chat['content']}\n"
-                        
-                        prompt = (
-                            f"You are a helpful AI assistant. Answer the user's question accurately based on the attached PDF document.\n"
-                            f"Here is the conversation history so far:\n{history_context}\n"
-                            f"User's new question: {user_query}"
-                        )
-                        
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-                        headers = {"Content-Type": "application/json"}
-                        
-                        data = {
-                            "contents": [{
-                                "parts": [
-                                    {"text": prompt},
-                                    {
-                                        "inlineData": {
-                                            "mimeType": "application/pdf",
-                                            "data": base64_pdf
-                                        }
-                                    }
-                                ]
-                            }]
-                        }
-                        
-                        req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers=headers)
-                        with urllib.request.urlopen(req) as response:
-                            res_data = json.loads(response.read().decode('utf-8'))
-                            ai_response = res_data['candidates'][0]['content']['parts'][0]['text']
-                            
-                        message_placeholder.markdown(ai_response)
-                        st.session_state.chat_history.append({"role": "assistant", "content": ai_response})
-                    except Exception as e:
-                        st.error(f"Error generating answer: {e}")
+                # Upload the PDF to Gemini's file storage
+                gemini_file = client.files.upload(file=tmp_path)
+
+                # Wait until the file finishes processing
+                while gemini_file.state == "PROCESSING":
+                    time.sleep(1)
+                    gemini_file = client.files.get(name=gemini_file.name)
+
+                if gemini_file.state == "FAILED":
+                    st.error("PDF processing failed. Try a different file.")
+                    st.stop()
+
+                prompt = style_prompts[summary_style]
+                if custom_instructions.strip():
+                    prompt += f"\n\nAdditional instructions: {custom_instructions.strip()}"
+
+                response = client.models.generate_content(
+                    model=MODEL,
+                    contents=[gemini_file, prompt],
+                )
+
+                st.subheader("Summary")
+                st.markdown(response.text)
+
+                st.download_button(
+                    "Download summary as .txt",
+                    data=response.text,
+                    file_name=f"{uploaded_file.name.rsplit('.', 1)[0]}_summary.txt",
+                    mime="text/plain",
+                )
+
+            except Exception as e:
+                st.error(f"Something went wrong: {e}")
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+else:
+    st.info("Upload a PDF file to get started.")

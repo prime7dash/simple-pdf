@@ -2,7 +2,15 @@ import streamlit as st
 import urllib.request
 import json
 import os
-import pypdf  # Clean text extraction
+import subprocess
+import sys
+
+# 🔥 FOOLPROOF HACK: Force the cloud server to install pypdf right now
+try:
+    import pypdf
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "pypdf"])
+    import pypdf
 
 st.set_page_config(page_title="Anshuman's PDF Summarizer", page_icon="📄", layout="centered")
 st.title("📄 Anshuman's Simple PDF Summarizer")
@@ -44,7 +52,6 @@ if uploaded_file is not None:
                 "Content-Type": "application/json"
             }
             
-            # Formatted exactly how Gemini expects its payload
             data = {
                 "contents": [{
                     "parts": [{
@@ -56,8 +63,6 @@ if uploaded_file is not None:
             req = urllib.request.Request(url, data=json.dumps(data).encode('utf-8'), headers=headers)
             with urllib.request.urlopen(req) as response:
                 res_data = json.loads(response.read().decode('utf-8'))
-                
-                # Extracting the output text from Gemini's response structure
                 summary = res_data['candidates'][0]['content']['parts'][0]['text']
                 
             st.success("Summary Generated Successfully!")

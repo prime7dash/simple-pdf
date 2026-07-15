@@ -1,15 +1,18 @@
 import streamlit as st
 import urllib.request
 import json
+import os
 
-st.set_page_config(page_title="PDF Summarizer", page_icon="📄", layout="centered")
-st.title("📄 Simple PDF Summarizer")
+st.set_page_config(page_title="Anshuman's PDF Summarizer", page_icon="📄", layout="centered")
+st.title("📄 Anshuman's Simple PDF Summarizer")
+st.caption("Created by Anshuman Dash")
 st.write("Upload a PDF to get an AI summary instantly.")
 
-api_key = st.sidebar.text_input("Enter OpenAI Key", type="password")
-
-if not api_key:
-    st.info("Please enter your OpenAI API key in the left sidebar to start.")
+# Automatically fetch the key from Streamlit Secrets
+if "OPENAI_API_KEY" in st.secrets:
+    api_key = st.secrets["OPENAI_API_KEY"]
+else:
+    st.error("🔑 API Key missing! Please configure 'OPENAI_API_KEY' in your Streamlit Cloud Secrets dashboard.")
     st.stop()
 
 uploaded_file = st.file_uploader("Upload your PDF file", type="pdf")
@@ -34,8 +37,8 @@ if uploaded_file is not None:
 
     with st.spinner("AI is thinking..."):
         try:
-            # Native API request using built-in urllib (No openai library required)
-            url = "https://openai.com"
+            # Fixed the API URL endpoint to point to OpenAI's Chat Completions API
+            url = "https://api.openai.com/v1/chat/completions"
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
